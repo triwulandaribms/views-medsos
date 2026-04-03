@@ -1,9 +1,16 @@
 import { SocialData } from "@/src/types/social";
 
-const cache = new Map<string, { data: SocialData; expiry: number }>();
+type CacheItem = {
+  data: SocialData;
+  expiry: number;
+}
 
-function getCache(key: string) {
+const cache = new Map<string, CacheItem>();
+
+function getCache(key: string): SocialData | null {
+
   const item = cache.get(key);
+
   if (!item) return null;
 
   if (Date.now() > item.expiry) {
@@ -14,10 +21,10 @@ function getCache(key: string) {
   return item.data;
 }
 
-function setCache(key: string, data: SocialData, ttl: number) {
+function setCache(key: string, data: SocialData, ttlMs: number) {
   cache.set(key, {
     data,
-    expiry: Date.now() + ttl,
+    expiry: Date.now() + ttlMs,
   });
 }
 
@@ -38,7 +45,9 @@ function mockInstagram(username: string): SocialData {
   };
 }
 
+
 export async function getInstagramData(username: string): Promise<SocialData> {
+
   const cacheKey = `instagram:${username}`;
 
   const cached = getCache(cacheKey);
@@ -47,90 +56,87 @@ export async function getInstagramData(username: string): Promise<SocialData> {
     return cached;
   }
 
-  console.log("IG Cache MISS → hit API:", username);
-
   try {
-    // =========================
-    // STEP 1: GET USER INFO
-    // =========================
+    const headers = {
+      "x-rapidapi-key": process.env.RAPID_API_KEY!,
+      "x-rapidapi-host": "instagram-scraper2.p.rapidapi.com",
+    };
+
     const userRes = await fetch(
-      `https://instagram-scraper2.p.rapidapi.com/user_tagged?username=${username}`,
-      {
-        method: "GET",
-        headers: {
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
-          "x-rapidapi-host": "instagram-scraper2.p.rapidapi.com",
-        },
-        redirect: "manual",
-      }
+      `https://instagram-scraper2.p.rapidapi.com/user_info?username=${username}`,
+      { headers }
     );
-    
+
+
+
     const userJson = await userRes.json();
-    
-    const user =
-      userJson?.data?.user ||
-      userJson?.data ||
-      userJson?.user ||
-      null;
-    
-    if (!user || !user.pk) {
-      console.error("USER JSON ERROR:", userJson);
+
+    // console.log("CEKKKKK USER JSON:", userJson);
+
+    if (!userRes.ok || !userJson?.data) {
+      console.error("API ERROR:", userJson);
       throw new Error("Failed get user info");
     }
-
-    console.log("RAW USER RESPONSE:", JSON.stringify(userJson, null, 2));
-
+    const user = userJson.data;
     const userId = user.pk;
 
-    // =========================
-    // STEP 2: GET TAGGED POSTS
-    // =========================
     const postRes = await fetch(
-      `https://instagram-scraper2.p.rapidapi.com/user_tagged?user_id=${userId}`,
-      {
-        method: "GET",
-        headers: {
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
-          "x-rapidapi-host": "instagram-scraper2.p.rapidapi.com",
-        },
-        redirect: "manual",
-      }
+      `https://instagram-scraper2.p.rapidapi.com/user_feed?user_id=${userId}`,
+      { headers }
     );
 
     const postJson = await postRes.json();
-    console.log("USER:", user);
-    console.log("POST JSON:", JSON.stringify(postJson, null, 2));
 
-    console.log("API KEY:", process.env.RAPID_API_KEY);
-    console.log("STATUS:", userRes.status);
-    console.log("HEADERS:", Object.fromEntries(userRes.headers.entries()));
+
+    // console.log("CEKKKKKKK POST API:", postJson);
+
+    // console.log("POST RAW:", JSON.stringify(postJson, null, 2));
 
     if (!postRes.ok || !postJson?.data) {
-      throw new Error("Failed get tagged posts");
+      throw new Error("Failed get posts");
     }
 
-    const posts = postJson.data?.items || [];
+    const posts = postJson?.data?.items || postJson?.items || [];
 
-    // =========================
-    // MAPPING
-    // =========================
+    const totalViews = posts.reduce((sum: number, p: any) => {
+      return (
+        sum +
+        (p.video_view_count ||
+          p.play_count ||
+          p.like_count ||
+          0)
+      );
+    }, 0);
+
     const result: SocialData = {
       platform: "Instagram",
       name: user.full_name || user.username,
-      avatar: user.profile_pic_url,
-      totalViews: posts.length,
+      avatar:
+        user.profile_pic_url ||
+        user.hd_profile_pic_url_info?.url ||
+        "https://via.placeholder.com/40",
+
+      totalViews,
+
 
       videos: posts.slice(0, 5).map((p: any) => ({
         title:
-          p.caption?.text ||
+          p.caption?.text?.slice(0, 50) ||
           "Instagram Post",
 
         views:
-          p.like_count ||
+          p.video_view_count ||
           p.play_count ||
+          p.like_count ||
           p.comment_count ||
           0,
       })),
+
+      stats: {
+        followers: user.follower_count || 0,
+        following: user.following_count || 0,
+        videoCount: user.media_count || 0,
+      },
     };
 
     setCache(cacheKey, result, 5 * 60 * 1000);
@@ -138,11 +144,10 @@ export async function getInstagramData(username: string): Promise<SocialData> {
     return result;
 
   } catch (err) {
+
     console.error("Instagram ERROR fallback:", err);
 
-    const mock = mockInstagram(username);
-    setCache(cacheKey, mock, 60 * 1000);
+    return mockInstagram(username);
 
-    return mock;
   }
 }

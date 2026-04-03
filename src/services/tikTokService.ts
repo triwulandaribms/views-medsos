@@ -1,9 +1,16 @@
 import { SocialData } from "@/src/types/social";
 
-const cache = new Map<string, { data: SocialData; expiry: number }>();
+type CacheItem = {
+  data: SocialData;
+  expiry: number;
+}
 
-function getCache(key: string) {
+const cache = new Map<string, CacheItem>();
+
+function getCache(key: string): SocialData | null {
+
   const item = cache.get(key);
+
   if (!item) return null;
 
   if (Date.now() > item.expiry) {
@@ -14,10 +21,10 @@ function getCache(key: string) {
   return item.data;
 }
 
-function setCache(key: string, data: SocialData, ttl: number) {
+function setCache(key: string, data: SocialData, ttlMs: number) {
   cache.set(key, {
     data,
-    expiry: Date.now() + ttl,
+    expiry: Date.now() + ttlMs,
   });
 }
 
@@ -64,8 +71,8 @@ export async function getTiktokData(username: string): Promise<SocialData> {
 
     const json = await res.json();
 
-    // console.log("STATUSSSS:", res.status);
-    // console.log("RESPONSEEEEE:", json);
+    // console.log("CEKKKKK STATUSSSS:", res.status);
+    // console.log("CEKKKKK RESPONSEEEEE:", json);
 
     const postsRes = await fetch(
       `https://tiktok-scraper7.p.rapidapi.com/user/posts?unique_id=${username}&count=5`,
@@ -79,7 +86,7 @@ export async function getTiktokData(username: string): Promise<SocialData> {
 
     const postsJson = await postsRes.json();
 
-    // console.log("POSTSSSSSSSS:", postsJson);
+    // console.log("CEKKKKKK POSTSSSSSSSS:", postsJson);
 
     const ambilVideos =
       postsJson?.data?.videos ||
@@ -98,9 +105,6 @@ export async function getTiktokData(username: string): Promise<SocialData> {
           v.statistics?.playCount ||
           0,
       }));
-
-    // console.log("POSTS STRUCTUREEEEE:", postsJson?.data);
-
 
     if (!res.ok || !json?.data) {
       if (json?.message?.toLowerCase().includes("limit") ||
@@ -144,9 +148,6 @@ export async function getTiktokData(username: string): Promise<SocialData> {
   } catch (err) {
     console.error("TikTok ERROR fallback:", err);
 
-    const mock = mockTikTok(username);
-    setCache(cacheKey, mock, 60 * 1000);
-
-    return mock;
+    return mockTikTok(username);
   }
 }

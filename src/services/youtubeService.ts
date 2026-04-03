@@ -59,16 +59,14 @@ export async function getYoutubeData(username: string): Promise<SocialData> {
       console.log("Cache HIT:", username);
       return cached;
     }
-  
-    // console.log("Cache MISS → hit API:", username);
-   
+     
     const searchRes = await fetch(
       `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${username}&key=${process.env.API_KEY_YOUTUBE}`
     );
 
     const searchData = await searchRes.json();
 
-    // console.log("ENV KEYYYY:", process.env.API_KEY_YOUTUBE);
+    // console.log("CEKKKK ENV KEYYYY:", process.env.API_KEY_YOUTUBE);
     // console.log("CEKKKK SEARCH DATAAAA:", searchData);
 
     if (searchData.error) {
@@ -130,8 +128,9 @@ export async function getYoutubeData(username: string): Promise<SocialData> {
     
     return result;
 
-  } catch (error: any) {
-    console.error("YouTube ERROR fallback:", error.message);
+  } catch (err) {
+
+    console.error("YouTube ERROR fallback:", err);
 
     return mockYoutube(username);
   }

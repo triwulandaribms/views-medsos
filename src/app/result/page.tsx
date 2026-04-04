@@ -1,9 +1,11 @@
 'use client'
 
+
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import SocialCard from '@/src/components/SocialCard'
 import { SocialData } from '@/src/types/social'
+
 
 export default function ResultPage() {
 
